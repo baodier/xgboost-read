@@ -301,9 +301,9 @@ class BoostLearner : public rabit::Serializable {
   }
   /*!
    * \brief evaluate the model for specific iteration
-   * \param iter iteration number
-   * \param evals datas i want to evaluate
-   * \param evname name of each dataset
+   * \param iter iteration number 第几次迭代
+   * \param evals datas i want to evaluate  一大堆的测试数据
+   * \param evname name of each dataset 测试数据们的名字
    * \return a string corresponding to the evaluation result
    */
   inline std::string EvalOneIter(int iter,
@@ -418,9 +418,9 @@ class BoostLearner : public rabit::Serializable {
   }
   /*!
    * \brief get un-transformed prediction
-   * \param data training data matrix
-   * \param out_preds output vector that stores the prediction
-   * \param ntree_limit limit number of trees used for boosted tree
+   * \param data training data matrix测试数据
+   * \param out_preds output vector that stores the prediction测试数据的输出结果
+   * \param ntree_limit limit number of trees used for boosted tree 用几个树
    *   predictor, when it equals 0, this means we are using all the trees
    */
   inline void PredictRaw(const DMatrix &data,
@@ -430,18 +430,20 @@ class BoostLearner : public rabit::Serializable {
                   data.info.info, out_preds, ntree_limit);
     // add base margin
     std::vector<float> &preds = *out_preds;
-    const bst_omp_uint ndata = static_cast<bst_omp_uint>(preds.size());
+    const bst_omp_uint ndata = static_cast<bst_omp_uint>(preds.size()); // 有多少个测试数据
+
+    // 下面是给每一个测试数据的测试结果再加上一个margin
     if (data.info.base_margin.size() != 0) {
       utils::Check(preds.size() == data.info.base_margin.size(),
                    "base_margin.size does not match with prediction size");
       #pragma omp parallel for schedule(static)
       for (bst_omp_uint j = 0; j < ndata; ++j) {
-        preds[j] += data.info.base_margin[j];
+        preds[j] += data.info.base_margin[j];//人为指定的每个册书样本的初始估计值
       }
     } else {
       #pragma omp parallel for schedule(static)
       for (bst_omp_uint j = 0; j < ndata; ++j) {
-        preds[j] += mparam.base_score;
+        preds[j] += mparam.base_score;//模型的偏置项    /* \brief global bias */
       }
     }
   }

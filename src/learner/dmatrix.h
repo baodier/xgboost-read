@@ -37,6 +37,7 @@ struct MetaInfo {
    * \brief initialized margins,
    * if specified, xgboost will start from this init margin
    * can be used to specify initial prediction to boost from
+   * 貌似就是最开始对每个样本的估计值，一个初始化，相当于后面的优化都是在这个初始估计的基础上进行运算的
    */
   std::vector<float> base_margin;
   /*! \brief version flag, used to check version of this info */

@@ -31,6 +31,11 @@ DataMatrix* LoadDataMatrix(const char *fname,
   }
 
   if (cache_file == NULL) {
+    // 如果是标准输入，或s3，或hdfs，或者我们只需要读一部分的数据进来
+    //\param loadsplit whether we only load a split of input files
+    //*   such that each worker node get a split of the data
+    // loadsplit的意思是是否指读取input数据的一部分，以便每一个worker都能读一部分数据
+    //
     if (!std::strcmp(fname, "stdin") ||
         !std::strncmp(fname, "s3://", 5) ||
         !std::strncmp(fname, "hdfs://", 7) ||
@@ -39,6 +44,8 @@ DataMatrix* LoadDataMatrix(const char *fname,
       dmat->LoadText(fname, silent, loadsplit);
       return dmat;
     }
+
+    // 读二进制数据
     int magic;
     utils::FileStream fs(utils::FopenCheck(fname, "rb"));
     utils::Check(fs.Read(&magic, sizeof(magic)) != 0, "invalid input file format");

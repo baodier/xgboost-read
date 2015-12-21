@@ -8,7 +8,7 @@ This document gives a basic walkthrough of xgboost python package.
 
 Install XGBoost
 ---------------
-To install XGBoost, do the following steps:
+To install XGBoost, do the following steps.
 
 * You need to run `make` in the root directory of the project
 * In the  `python-package` directory run
@@ -22,39 +22,34 @@ import xgboost as xgb
 
 Data Interface
 --------------
-The XGBoost python module is able to load data from:
-- libsvm txt format file
-- Numpy 2D array, and 
-- xgboost binary buffer file. 
+XGBoost python module is able to loading from libsvm txt format file, Numpy 2D array and xgboost binary buffer file. The data will be store in ```DMatrix``` object.
 
-The data will be store in a ```DMatrix``` object.
-
-* To load a libsvm text file or a XGBoost binary file into ```DMatrix```, the command is:
+* To load libsvm text format file and XGBoost binary file into ```DMatrix```, the usage is like
 ```python
 dtrain = xgb.DMatrix('train.svm.txt')
 dtest = xgb.DMatrix('test.svm.buffer')
 ```
-* To load a numpy array into ```DMatrix```, the command is:
+* To load numpy array into ```DMatrix```, the usage is like
 ```python
 data = np.random.rand(5,10) # 5 entities, each contains 10 features
 label = np.random.randint(2, size=5) # binary target
 dtrain = xgb.DMatrix( data, label=label)
 ```
-* To load a scpiy.sparse array into ```DMatrix```, the command is:
+* Build ```DMatrix``` from ```scipy.sparse```
 ```python
 csr = scipy.sparse.csr_matrix((dat, (row, col)))
 dtrain = xgb.DMatrix(csr)
 ```
-* Saving ```DMatrix``` into XGBoost binary file will make loading faster in next time:
+* Saving ```DMatrix``` into XGBoost binary file will make loading faster in next time. The usage is like:
 ```python
 dtrain = xgb.DMatrix('train.svm.txt')
 dtrain.save_binary("train.buffer")
 ```
-* To handle missing value in ```DMatrix```, you can initialize the ```DMatrix``` by specifying missing values:
+* To handle missing value in ```DMatrix```, you can initialize the ```DMatrix``` like:
 ```python
 dtrain = xgb.DMatrix(data, label=label, missing = -999.0)
 ```
-* Weight can be set when needed:
+* Weight can be set when needed, like
 ```python
 w = np.random.rand(5, 1)
 dtrain = xgb.DMatrix(data, label=label, missing = -999.0, weight=w)
@@ -67,17 +62,10 @@ XGBoost use list of pair to save [parameters](../parameter.md). Eg
 ```python
 param = {'bst:max_depth':2, 'bst:eta':1, 'silent':1, 'objective':'binary:logistic' }
 param['nthread'] = 4
-param['eval_metric'] = 'auc'
+plst = param.items()
+plst += [('eval_metric', 'auc')] # Multiple evals can be handled in this way
+plst += [('eval_metric', 'ams@0')]
 ```
-* You can also specify multiple eval metrics:
-```python
-param['eval_metric'] = ['auc', 'ams@0'] 
-
-# alternativly:
-# plst = param.items()
-# plst += [('eval_metric', 'ams@0')]
-```
-
 * Specify validations set to watch performance
 ```python
 evallist  = [(dtest,'eval'), (dtrain,'train')]
@@ -121,9 +109,9 @@ Early stopping requires at least one set in `evals`. If there's more than one, i
 
 The model will train until the validation score stops improving. Validation error needs to decrease at least every `early_stopping_rounds` to continue training.
 
-If early stopping occurs, the model will have three additional fields: `bst.best_score`, `bst.best_iteration` and `bst.best_ntree_limit`. Note that `train()` will return a model from the last iteration, not the best one.
+If early stopping occurs, the model will have two additional fields: `bst.best_score` and `bst.best_iteration`. Note that `train()` will return a model from the last iteration, not the best one.
 
-This works with both metrics to minimize (RMSE, log loss, etc.) and to maximize (MAP, NDCG, AUC). Note that if you specify more than one evaluation metric the last one in `param['eval_metric']` is used for early stopping.
+This works with both metrics to minimize (RMSE, log loss, etc.) and to maximize (MAP, NDCG, AUC).
 
 Prediction
 ----------
@@ -135,9 +123,9 @@ dtest = xgb.DMatrix(data)
 ypred = bst.predict(xgmat)
 ```
 
-If early stopping is enabled during training, you can get predicticions from the best iteration with `bst.best_ntree_limit`:
+If early stopping is enabled during training, you can predict with the best iteration.
 ```python
-ypred = bst.predict(xgmat,ntree_limit=bst.best_ntree_limit)
+ypred = bst.predict(xgmat,ntree_limit=bst.best_iteration)
 ```
 
 Plotting

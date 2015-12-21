@@ -1,6 +1,6 @@
-export CC  = $(if $(shell which gcc-5),gcc-5,gcc)
-export CXX = $(if $(shell which g++-5),g++-5,g++)
-
+export CC  = gcc
+#build on the fly
+export CXX = g++
 export MPICXX = mpicxx
 export LDFLAGS= -pthread -lm
 export CFLAGS = -Wall -O3 -msse2  -Wno-unknown-pragmas -funroll-loops
@@ -21,16 +21,8 @@ endif
 ifeq ($(no_omp),1)
 	CFLAGS += -DDISABLE_OPENMP
 else
-	#CFLAGS += -fopenmp
-	ifeq ($(omp_mac_static),1)
-		#CFLAGS += -fopenmp -Bstatic
-		CFLAGS += -static-libgcc -static-libstdc++ -L. -fopenmp
-		#LDFLAGS += -Wl,--whole-archive -lpthread -Wl --no-whole-archive
-	else
-		CFLAGS += -fopenmp
-	endif
+	CFLAGS += -fopenmp
 endif
-
 
 # by default use c++11
 ifeq ($(cxx11),1)
@@ -180,10 +172,8 @@ pythonpack:
 	#make clean
 	cd subtree/rabit;make clean;cd ..
 	rm -rf xgboost-deploy xgboost*.tar.gz
-	#pip install pypandoc and also brew/apt-get install pandoc
-	python python-package/conv_rst.py
 	cp -r python-package xgboost-deploy
-	#cp *.md xgboost-deploy/
+	cp *.md xgboost-deploy/
 	cp LICENSE xgboost-deploy/
 	cp Makefile xgboost-deploy/xgboost
 	cp -r wrapper xgboost-deploy/xgboost
@@ -191,7 +181,7 @@ pythonpack:
 	cp -r multi-node xgboost-deploy/xgboost
 	cp -r windows xgboost-deploy/xgboost
 	cp -r src xgboost-deploy/xgboost
-	cp python-package/setup_pip.py xgboost-deploy/setup.py
+
 	#make python
 
 pythonbuild:

@@ -136,11 +136,16 @@ class GBTree : public IGradBooster {
     int nthread;
     #pragma omp parallel
     {
-      nthread = omp_get_num_threads();
+      nthread = omp_get_num_threads();//返回当前使用的线程个数，如果在并行区域外则返回1
     }
-    InitThreadTemp(nthread);
+    thread_temp.resize(nthread, tree::RegTree::FVec());//resize是改变容器的大小，且在创建对象，
+    // 因此，调用这个函数之后，就可以引用容器内的对象了，因此当加入新的元素时，用operator[]操作符，
+    // 或者用迭代器来引用元素对象。此时再调用push_back()函数，是加在这个新的空间后面的。
+    for (int i = 0; i < nthread; ++i) {
+      thread_temp[i].Init(mparam.num_feature);//初始化“可用线程数”个元素的vector，每个里面都是一个tree::RegTree::FVec，FVec里面存的和特征个数有关
+    }
     std::vector<float> &preds = *out_preds;
-    const size_t stride = info.num_row * mparam.num_output_group;
+    const size_t stride = info.num_row * mparam.num_output_group;//how many output group a single instance can produce
     preds.resize(stride * (mparam.size_leaf_vector+1));
     // start collecting the prediction
     utils::IIterator<RowBatch> *iter = p_fmat->RowIterator();
@@ -151,16 +156,19 @@ class GBTree : public IGradBooster {
       const bst_omp_uint nsize = static_cast<bst_omp_uint>(batch.size);
       #pragma omp parallel for schedule(static)
       for (bst_omp_uint i = 0; i < nsize; ++i) {
-        const int tid = omp_get_thread_num();
+        const int tid = omp_get_thread_num();//获得每个线程的ID
         tree::RegTree::FVec &feats = thread_temp[tid];
-        int64_t ridx = static_cast<int64_t>(batch.base_rowid + i);
+        int64_t ridx = static_cast<int64_t>(batch.base_rowid + i);//ridx是这一个instance的index，等于batch的base index加上目前在这个batch里面的index
         utils::Assert(static_cast<size_t>(ridx) < info.num_row, "data row index exceed bound");
         // loop over output groups
-        for (int gid = 0; gid < mparam.num_output_group; ++gid) {
-          this->Pred(batch[i],
-                     buffer_offset < 0 ? -1 : buffer_offset + ridx,
-                     gid, info.GetRoot(ridx), &feats,
-                     &preds[ridx * mparam.num_output_group + gid], stride,
+        for (int gid = 0; gid < mparam.num_output_group; ++gid) {//感觉这个nu_output_group应该是更树木的棵树有关
+          this->Pred(batch[i],//第几条数据instance
+                     buffer_offset < 0 ? -1 : buffer_offset + ridx,//
+                     gid,//树木的棵树index
+                     info.GetRoot(ridx), //get root of ith instance
+                     &feats,//所有特征
+                     &preds[ridx * mparam.num_output_group + gid], //每个样本有num_output_group棵树，preds组成了一个instance数*树棵树的vector
+               stride,// yangbenshu *每个样本的树棵树
                      ntree_limit);
         }
       }
@@ -191,7 +199,10 @@ class GBTree : public IGradBooster {
     {
       nthread = omp_get_num_threads();
     }
-    InitThreadTemp(nthread);
+    thread_temp.resize(nthread, tree::RegTree::FVec());
+    for (int i = 0; i < nthread; ++i) {
+      thread_temp[i].Init(mparam.num_feature);
+    }
     this->PredPath(p_fmat, info, out_preds, ntree_limit);
   }
   virtual std::vector<std::string> DumpModel(const utils::FeatMap& fmap, int option) {
@@ -382,16 +393,6 @@ class GBTree : public IGradBooster {
           preds[ridx * ntree_limit + j] = static_cast<float>(tid);
         }
         feats.Drop(batch[i]);
-      }
-    }
-  }
-  // init thread buffers
-  inline void InitThreadTemp(int nthread) {
-    int prev_thread_temp_size = thread_temp.size();
-    if (prev_thread_temp_size < nthread) {
-      thread_temp.resize(nthread, tree::RegTree::FVec());
-      for (int i = prev_thread_temp_size; i < nthread; ++i) {
-        thread_temp[i].Init(mparam.num_feature);
       }
     }
   }

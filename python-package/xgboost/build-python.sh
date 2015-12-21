@@ -10,11 +10,7 @@
 #       conflict with build.sh which is for everything. 
 
 
-#pushd xgboost
-oldpath=`pwd`
-cd ./xgboost/
-#remove the pre-compiled .so and trigger the system's on-the-fly compiling
-make clean
+pushd xgboost
 if make python; then
     echo "Successfully build multi-thread xgboost"
 else
@@ -27,4 +23,4 @@ else
     echo "If you want multi-threaded version"
     echo "See additional instructions in doc/build.md"
 fi
-cd $oldpath
+popd

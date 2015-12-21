@@ -15,10 +15,11 @@
 #' bst <- xgb.load('xgb.model')
 #' pred <- predict(bst, test$data)
 #' @export
+#' 
 xgb.load <- function(modelfile) {
-  if (is.null(modelfile))
+  if (is.null(modelfile)) 
     stop("xgb.load: modelfile cannot be NULL")
-
+  
   handle <- xgb.Booster(modelfile = modelfile)
   # re-use modelfile if it is raw so we donot need to serialize
   if (typeof(modelfile) == "raw") {
@@ -28,4 +29,4 @@ xgb.load <- function(modelfile) {
   }
   bst <- xgb.Booster.check(bst)
   return(bst)
-}
+} 

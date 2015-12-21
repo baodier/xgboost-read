@@ -7,9 +7,23 @@ import numpy as np
 from .core import Booster, DMatrix, XGBoostError
 from .training import train
 
-from .compat import (SKLEARN_INSTALLED, XGBModelBase,
-                     XGBClassifierBase, XGBRegressorBase, LabelEncoder)
+try:
+    from sklearn.base import BaseEstimator
+    from sklearn.base import RegressorMixin, ClassifierMixin
+    from sklearn.preprocessing import LabelEncoder
+    SKLEARN_INSTALLED = True
+except ImportError:
+    SKLEARN_INSTALLED = False
 
+# used for compatiblity without sklearn
+XGBModelBase = object
+XGBClassifierBase = object
+XGBRegressorBase = object
+
+if SKLEARN_INSTALLED:
+    XGBModelBase = BaseEstimator
+    XGBRegressorBase = RegressorMixin
+    XGBClassifierBase = ClassifierMixin
 
 class XGBModel(XGBModelBase):
     # pylint: disable=too-many-arguments, too-many-instance-attributes, invalid-name
@@ -40,14 +54,6 @@ class XGBModel(XGBModelBase):
         Subsample ratio of the training instance.
     colsample_bytree : float
         Subsample ratio of columns when constructing each tree.
-    colsample_bylevel : float
-        Subsample ratio of columns for each split, in each level.
-    reg_alpha : float (xgb's alpha)
-        L2 regularization term on weights
-    reg_lambda : float (xgb's lambda)
-        L1 regularization term on weights
-    scale_pos_weight : float
-        Balancing of positive and negative weights.
 
     base_score:
         The initial prediction score of all instances, global bias.
@@ -60,8 +66,7 @@ class XGBModel(XGBModelBase):
     def __init__(self, max_depth=3, learning_rate=0.1, n_estimators=100,
                  silent=True, objective="reg:linear",
                  nthread=-1, gamma=0, min_child_weight=1, max_delta_step=0,
-                 subsample=1, colsample_bytree=1, colsample_bylevel=1,
-                 reg_alpha=0, reg_lambda=1, scale_pos_weight=1,
+                 subsample=1, colsample_bytree=1,
                  base_score=0.5, seed=0, missing=None):
         if not SKLEARN_INSTALLED:
             raise XGBoostError('sklearn needs to be installed in order to use this module')
@@ -77,10 +82,6 @@ class XGBModel(XGBModelBase):
         self.max_delta_step = max_delta_step
         self.subsample = subsample
         self.colsample_bytree = colsample_bytree
-        self.colsample_bylevel = colsample_bylevel
-        self.reg_alpha = reg_alpha
-        self.reg_lambda = reg_lambda
-        self.scale_pos_weight = scale_pos_weight
 
         self.base_score = base_score
         self.seed = seed
@@ -164,7 +165,7 @@ class XGBModel(XGBModelBase):
         """
         trainDmatrix = DMatrix(X, label=y, missing=self.missing)
 
-        evals_result = {}
+        eval_results = {}
         if eval_set is not None:
             evals = list(DMatrix(x[0], label=x[1]) for x in eval_set)
             evals = list(zip(evals, ["validation_{}".format(i) for i in
@@ -184,62 +185,23 @@ class XGBModel(XGBModelBase):
         self._Booster = train(params, trainDmatrix,
                               self.n_estimators, evals=evals,
                               early_stopping_rounds=early_stopping_rounds,
-                              evals_result=evals_result, feval=feval,
+                              evals_result=eval_results, feval=feval,
                               verbose_eval=verbose)
-
-        if evals_result:
-            for val in evals_result.items():
-                evals_result_key = list(val[1].keys())[0]
-                evals_result[val[0]][evals_result_key] = val[1][evals_result_key]
-            self.evals_result_ = evals_result
+        if eval_results:
+            eval_results = {k: np.array(v, dtype=float)
+                            for k, v in eval_results.items()}
+            eval_results = {k: np.array(v) for k, v in eval_results.items()}
+            self.eval_results = eval_results
 
         if early_stopping_rounds is not None:
             self.best_score = self._Booster.best_score
             self.best_iteration = self._Booster.best_iteration
         return self
 
-    def predict(self, data, output_margin=False, ntree_limit=0):
+    def predict(self, data):
         # pylint: disable=missing-docstring,invalid-name
         test_dmatrix = DMatrix(data, missing=self.missing)
-        return self.booster().predict(test_dmatrix,
-                                      output_margin=output_margin,
-                                      ntree_limit=ntree_limit)
-
-    def evals_result(self):
-        """Return the evaluation results.
-
-        If eval_set is passed to the `fit` function, you can call evals_result() to
-        get evaluation results for all passed eval_sets. When eval_metric is also
-        passed to the `fit` function, the evals_result will contain the eval_metrics
-        passed to the `fit` function
-
-        Returns
-        -------
-        evals_result : dictionary
-
-        Example
-        -------
-        param_dist = {'objective':'binary:logistic', 'n_estimators':2}
-
-        clf = xgb.XGBModel(**param_dist)
-
-        clf.fit(X_train, y_train,
-                eval_set=[(X_train, y_train), (X_test, y_test)],
-                eval_metric='logloss',
-                verbose=True)
-
-        evals_result = clf.evals_result()
-
-        The variable evals_result will contain:
-        {'validation_0': {'logloss': ['0.604835', '0.531479']},
-         'validation_1': {'logloss': ['0.41965', '0.17686']}}
-        """
-        if self.evals_result_:
-            evals_result = self.evals_result_
-        else:
-            raise XGBoostError('No results.')
-
-        return evals_result
+        return self.booster().predict(test_dmatrix)
 
 
 class XGBClassifier(XGBModel, XGBClassifierBase):
@@ -252,16 +214,14 @@ class XGBClassifier(XGBModel, XGBClassifierBase):
                  n_estimators=100, silent=True,
                  objective="binary:logistic",
                  nthread=-1, gamma=0, min_child_weight=1,
-                 max_delta_step=0, subsample=1, colsample_bytree=1, colsample_bylevel=1,
-                 reg_alpha=0, reg_lambda=1, scale_pos_weight=1,
+                 max_delta_step=0, subsample=1, colsample_bytree=1,
                  base_score=0.5, seed=0, missing=None):
         super(XGBClassifier, self).__init__(max_depth, learning_rate,
                                             n_estimators, silent, objective,
                                             nthread, gamma, min_child_weight,
                                             max_delta_step, subsample,
-                                            colsample_bytree, colsample_bylevel,
-                                            reg_alpha, reg_lambda,
-                                            scale_pos_weight, base_score, seed, missing)
+                                            colsample_bytree,
+                                            base_score, seed, missing)
 
     def fit(self, X, y, sample_weight=None, eval_set=None, eval_metric=None,
             early_stopping_rounds=None, verbose=True):
@@ -299,7 +259,7 @@ class XGBClassifier(XGBModel, XGBClassifierBase):
             If `verbose` and an evaluation set is used, writes the evaluation
             metric measured on the validation set to stderr.
         """
-        evals_result = {}
+        eval_results = {}
         self.classes_ = list(np.unique(y))
         self.n_classes_ = len(self.classes_)
         if self.n_classes_ > 2:
@@ -339,14 +299,13 @@ class XGBClassifier(XGBModel, XGBClassifierBase):
         self._Booster = train(xgb_options, train_dmatrix, self.n_estimators,
                               evals=evals,
                               early_stopping_rounds=early_stopping_rounds,
-                              evals_result=evals_result, feval=feval,
+                              evals_result=eval_results, feval=feval,
                               verbose_eval=verbose)
 
-        if evals_result:
-            for val in evals_result.items():
-                evals_result_key = list(val[1].keys())[0]
-                evals_result[val[0]][evals_result_key] = val[1][evals_result_key]
-            self.evals_result_ = evals_result
+        if eval_results:
+            eval_results = {k: np.array(v, dtype=float)
+                            for k, v in eval_results.items()}
+            self.eval_results = eval_results
 
         if early_stopping_rounds is not None:
             self.best_score = self._Booster.best_score
@@ -354,11 +313,9 @@ class XGBClassifier(XGBModel, XGBClassifierBase):
 
         return self
 
-    def predict(self, data, output_margin=False, ntree_limit=0):
+    def predict(self, data):
         test_dmatrix = DMatrix(data, missing=self.missing)
-        class_probs = self.booster().predict(test_dmatrix,
-                                             output_margin=output_margin,
-                                             ntree_limit=ntree_limit)
+        class_probs = self.booster().predict(test_dmatrix)
         if len(class_probs.shape) > 1:
             column_indexes = np.argmax(class_probs, axis=1)
         else:
@@ -366,53 +323,15 @@ class XGBClassifier(XGBModel, XGBClassifierBase):
             column_indexes[class_probs > 0.5] = 1
         return self._le.inverse_transform(column_indexes)
 
-    def predict_proba(self, data, output_margin=False, ntree_limit=0):
+    def predict_proba(self, data):
         test_dmatrix = DMatrix(data, missing=self.missing)
-        class_probs = self.booster().predict(test_dmatrix,
-                                             output_margin=output_margin,
-                                             ntree_limit=ntree_limit)
+        class_probs = self.booster().predict(test_dmatrix)
         if self.objective == "multi:softprob":
             return class_probs
         else:
             classone_probs = class_probs
             classzero_probs = 1.0 - classone_probs
             return np.vstack((classzero_probs, classone_probs)).transpose()
-
-    def evals_result(self):
-        """Return the evaluation results.
-
-        If eval_set is passed to the `fit` function, you can call evals_result() to
-        get evaluation results for all passed eval_sets. When eval_metric is also
-        passed to the `fit` function, the evals_result will contain the eval_metrics
-        passed to the `fit` function
-
-        Returns
-        -------
-        evals_result : dictionary
-
-        Example
-        -------
-        param_dist = {'objective':'binary:logistic', 'n_estimators':2}
-
-        clf = xgb.XGBClassifier(**param_dist)
-
-        clf.fit(X_train, y_train,
-                eval_set=[(X_train, y_train), (X_test, y_test)],
-                eval_metric='logloss',
-                verbose=True)
-
-        evals_result = clf.evals_result()
-
-        The variable evals_result will contain:
-        {'validation_0': {'logloss': ['0.604835', '0.531479']},
-         'validation_1': {'logloss': ['0.41965', '0.17686']}}
-        """
-        if self.evals_result_:
-            evals_result = self.evals_result_
-        else:
-            raise XGBoostError('No results.')
-
-        return evals_result
 
 class XGBRegressor(XGBModel, XGBRegressorBase):
     # pylint: disable=missing-docstring

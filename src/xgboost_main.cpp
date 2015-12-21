@@ -19,10 +19,13 @@ namespace xgboost {
 class BoostLearnTask {
  public:
   inline int Run(int argc, char *argv[]) {
+    // 参数中是一个config文件
     if (argc < 2) {
       printf("Usage: <config>\n");
       return 0;
     }
+
+    //读入配置参数
     utils::ConfigIterator itr(argv[1]);
     while (itr.Next()) {
       this->SetParam(itr.name(), itr.val());
@@ -33,25 +36,35 @@ class BoostLearnTask {
         this->SetParam(name, val);
       }
     }
+
+    //设置静默输出
     // do not save anything when save to stdout
     if (model_out == "stdout" || name_pred == "stdout") {
       this->SetParam("silent", "1");
       save_period = 0;
     }
     // initialized the result
+    // 初始化rabit
     rabit::Init(argc, argv);
+
+    // 判断是否是分布式的
     if (rabit::IsDistributed()) {
       std::string pname = rabit::GetProcessorName();
       fprintf(stderr, "start %s:%d\n", pname.c_str(), rabit::GetRank());
     }
+
+    // 分布式数据，默认的数据分割方式是按行分割
     if (rabit::IsDistributed() && data_split == "NONE") {
       this->SetParam("dsplit", "row");
     }
+
+    // ？？？？？
     if (rabit::GetRank() != 0) {
       this->SetParam("silent", "2");
     }
     this->InitData();
 
+    // 处理四种操作：训练、导出、评估、预测
     if (task == "train") {
       // if task is training, will try recover from checkpoint
       this->TaskTrain();
@@ -70,16 +83,27 @@ class BoostLearnTask {
     }
     return 0;
   }
+
   inline void SetParam(const char *name, const char *val) {
+    // 静默输出
     if (!strcmp("silent", name)) silent = atoi(val);
+    //
     if (!strcmp("use_buffer", name)) use_buffer = atoi(val);
+    //
     if (!strcmp("num_round", name)) num_round = atoi(val);
+    //
     if (!strcmp("pred_margin", name)) pred_margin = atoi(val);
+    //
     if (!strcmp("ntree_limit", name)) ntree_limit = atoi(val);
+    // 多少轮保存一次模型
     if (!strcmp("save_period", name)) save_period = atoi(val);
+    //
     if (!strcmp("eval_train", name)) eval_train = atoi(val);
+    //
     if (!strcmp("task", name)) task = val;
+    //
     if (!strcmp("data", name)) train_path = val;
+    //
     if (!strcmp("test:data", name)) test_path = val;
     if (!strcmp("model_in", name)) model_in = val;
     if (!strcmp("model_out", name)) model_out = val;
@@ -132,6 +156,7 @@ class BoostLearnTask {
 
  private:
   inline void InitData(void) {
+    // 训练集地址
     if (strchr(train_path.c_str(), '%') != NULL) {
       char s_tmp[256];
       utils::SPrintf(s_tmp, sizeof(s_tmp), train_path.c_str(), rabit::GetRank());
@@ -139,16 +164,22 @@ class BoostLearnTask {
       load_part = 1;
     }
     bool loadsplit = data_split == "row";
+    // 读feature map，类型是一个枚举类型，还没搞明白是干啥的
     if (name_fmap != "NULL") fmap.LoadText(name_fmap.c_str());
     if (task == "dump") return;
+
+    //加载预测数据
     if (task == "pred") {
       data = io::LoadDataMatrix(test_path.c_str(), silent != 0, use_buffer != 0, loadsplit);
     } else {
+      //加载训练数据
       // training
       data = io::LoadDataMatrix(train_path.c_str(),
                                 silent != 0 && load_part == 0,
                                 use_buffer != 0, loadsplit);
       utils::Assert(eval_data_names.size() == eval_data_paths.size(), "BUG");
+
+      // 可以有一大堆的检验数据集
       for (size_t i = 0; i < eval_data_names.size(); ++i) {
         deval.push_back(io::LoadDataMatrix(eval_data_paths[i].c_str(),
                                            silent != 0,
@@ -157,6 +188,7 @@ class BoostLearnTask {
         devalall.push_back(deval.back());
       }
 
+      // dcache里面包含了训练集和测试集
       std::vector<io::DataMatrix *> dcache(1, data);
       for (size_t i = 0; i < deval.size(); ++i) {
         dcache.push_back(deval[i]);

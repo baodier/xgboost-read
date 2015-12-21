@@ -29,8 +29,9 @@ setClass("xgb.Booster",
 #'                eta = 1, nthread = 2, nround = 2,objective = "binary:logistic")
 #' pred <- predict(bst, test$data)
 #' @export
-setMethod("predict", signature = "xgb.Booster",
-          definition = function(object, newdata, missing = NA,
+#' 
+setMethod("predict", signature = "xgb.Booster", 
+          definition = function(object, newdata, missing = NULL, 
                                 outputmargin = FALSE, ntreelimit = NULL, predleaf = FALSE) {
   if (class(object) != "xgb.Booster"){
     stop("predict: model in prediction must be of class xgb.Booster")
@@ -38,7 +39,11 @@ setMethod("predict", signature = "xgb.Booster",
     object <- xgb.Booster.check(object, saveraw = FALSE)
   }
   if (class(newdata) != "xgb.DMatrix") {
-    newdata <- xgb.DMatrix(newdata, missing = missing)
+    if (is.null(missing)) {
+      newdata <- xgb.DMatrix(newdata)
+    } else {
+      newdata <- xgb.DMatrix(newdata, missing = missing)
+    }
   }
   if (is.null(ntreelimit)) {
     ntreelimit <- 0
@@ -47,14 +52,14 @@ setMethod("predict", signature = "xgb.Booster",
       stop("predict: ntreelimit must be equal to or greater than 1")
     }
   }
-  option <- 0
+  option = 0
   if (outputmargin) {
     option <- option + 1
   }
   if (predleaf) {
     option <- option + 2
   }
-  ret <- .Call("XGBoosterPredict_R", object$handle, newdata, as.integer(option),
+  ret <- .Call("XGBoosterPredict_R", object$handle, newdata, as.integer(option), 
                as.integer(ntreelimit), PACKAGE = "xgboost")
   if (predleaf){
       len <- getinfo(newdata, "nrow")
@@ -67,3 +72,4 @@ setMethod("predict", signature = "xgb.Booster",
   }
   return(ret)
 })
+
